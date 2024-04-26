@@ -1,5 +1,13 @@
 import networkx as nx
 
+def get_full_graph(base_directory):
+    nodes_file = base_directory + "Nodes.txt"
+    edges_file = base_directory + "Edges.txt"
+    graph = create_graph(nodes_file, edges_file)
+    stops = get_stops(base_directory + "People.txt")
+
+    return graph, stops
+
 def convert_to_minutes(time_str):
     # Split the string into hours and minutes
     parts = time_str.split(':')
@@ -56,16 +64,18 @@ def read_edges(filename):
     return edges
 
 def create_graph(nodes_file, edges_file):
-    G = nx.Graph()
+    G = nx.DiGraph()
     
     nodes = read_nodes(nodes_file)
     edges = read_edges(edges_file)
     
-    for index, (key, value) in enumerate(nodes.items(), start=1):
+    for index, (key, value) in enumerate(nodes.items(), start=0):
         G.add_node(index, **value)
 
-    for index, (key, edge) in enumerate(edges.items(), start=1):
+    for index, (key, edge) in enumerate(edges.items(), start=0):
         G.add_edge(edge['origin'], edge['destination'], 
+                   weight=edge['travel_time'], id=edge['edge_id'])
+        G.add_edge(edge['destination'], edge['origin'], 
                    weight=edge['travel_time'], id=edge['edge_id'])
     
     return G
@@ -73,7 +83,7 @@ def create_graph(nodes_file, edges_file):
 def get_schools_and_depots(nodes):
     schools = {}
     depots = {}
-    for (key, node) in enumerate(nodes.items(), start=1):
+    for (key, node) in enumerate(nodes.items(), start=0):
         if node[1]['node_type'] == 'School Node':
             schools[node[1]['node_id']] = node
         elif node[1]['node_type'] == 'Depot Node':
@@ -101,7 +111,7 @@ def get_stops(filename):
                 stops[stop_key] = 1
     stops_list = [(stop[0], n_p, stop[1], stop[2], stop[3], stop[4]) for stop, n_p in stops.items()]
 
-    stops_dict = {index: stop for index, stop in enumerate(stops_list, start=1)}
+    stops_dict = {index: stop for index, stop in enumerate(stops_list)}
 
     return stops_dict
 
