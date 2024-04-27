@@ -87,6 +87,7 @@ def optimize_model(vehicles, requests, graph):
 
     print("Calculated Costs: " + get_time())
 
+    # model = Model("VRPPDTW", solver='cplex_local')
     model = Model("VRPPDTW")
 
     X = {}
@@ -131,8 +132,8 @@ def optimize_model(vehicles, requests, graph):
         
     for k in K:
         for i in P:
-            model.add_constraint(model.sum(X[(i, j), k] for j in range(n, 2*n) if j != i) -
-                                model.sum(X[(j, n+i), k] for j in range(n, 2*n) if j != n+i) == 0,
+            model.add_constraint(model.sum(X[(i, j), k] for j in N if j != i) -
+                                model.sum(X[(j, n+i), k] for j in N if j != n+i) == 0,
                                 ctname=f'const_9_3_{k}_{i}')
         
     # for k in K:
@@ -243,6 +244,10 @@ def optimize_model(vehicles, requests, graph):
                 alpha1 + alpha2 <= 1,
                 ctname=f'const_9_10c_{k}_{i}_{j}'
             )
+            # model.add_constraint(
+            #     L[i, k] + l[j] - L[j, k] >= 0,
+            #     ctname=f'const_9_10d_{k}_{i}_{j}'
+            # )
 
     for k in K:
         for i in P:
@@ -258,6 +263,9 @@ def optimize_model(vehicles, requests, graph):
     for k in K:
         model.add_constraint(L[origin, k] == 0, ctname=f'const_9_13_{k}')
 
+        ##
+        model.add_constraint(L[destination, k] == 0, ctname=f'const_9_15_{k}')
+
     for k in K:
         for (i,j) in A[k]:
             model.add_constraint(X[(i,j), k] >= 0, ctname=f'const_9_14_{k}_{i}_{j}')
@@ -268,32 +276,57 @@ def optimize_model(vehicles, requests, graph):
 
     print("Model Sovle Finish: " + get_time())
 
-    buses_paths = {k: [] for k in K}
-
+    chosen_xijk = {k: [] for k in K}
     chosen_X = {k: [] for k in K}
     chosen_T = {k: [] for k in K}
     chosen_L = {k: [] for k in K}
+
+    buses_paths = {k: {} for k in K}
+    buses_paths_sorted = {k: [] for k in K}
 
     if solution:
         for k in K:
             for (i, j) in A[k]:
                 var_value = solution.get_value(X[(i,j), k])
                 if var_value > 0.9:
+                    start_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[i, k])), 60))
+                    finish_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[j, k])), 60))
+
+                    if V[k][j] < n:
+                        status = "Picking Up Request " + str(j) + " at Node " + str(V_val[k][j])
+                    elif V[k][j] < 2*n:
+                        status = "Delivering Request " + str(j-n) + " at Node " + str(V_val[k][j])
+                    elif V[k][j] == 2*n + 1:
+                        status = "Going to Destination Depot " + str(V_val[k][j])
+                    
+                    buses_paths[k][V[k][i]] = {"origin_dest_ids" : (V[k][i], V[k][j]), "start_time" : start_time_string,
+                                         "finish_time" : finish_time_string, 
+                                         "start_load" : solution.get_value(L[i, k]),
+                                         "finish_load" : solution.get_value(L[j, k]),
+                                         "path" : shortest_paths_dict[V_val[k][i]][V_val[k][j]],
+                                         "status" : status}
+                    chosen_xijk[k].append((V[k][i], V[k][j]))
                     chosen_X[k].append((V_val[k][i], V_val[k][j]))
-                    buses_paths[k].append((shortest_paths_dict[V_val[k][i]][V_val[k][j]]))
 
-            for i in range(2*n + 2):
-                chosen_T[k].append(solution.get_value(T[i, k]))
+            for i in range(len(V[k])):
+                time_string = "{}:{}".format(*divmod(round(solution.get_value(T[i, k])), 60))
+                chosen_T[k].append(time_string)
 
-            for i in range(2*n + 2):
-                chosen_L[k].append(solution.get_value(L[i, k]))
+            for i in range(len(V[k])):
+                chosen_L[k].append(round(solution.get_value(L[i, k])))
+
+            next_i = 2*n
+            while len(buses_paths[k]) > 0:
+                item = buses_paths[k].pop(next_i)
+                next_i = item["origin_dest_ids"][1]
+                buses_paths_sorted[k].append(item)
 
         print("Objective value:", model.objective_value)
 
     else:
         print("The model could not be solved.")
 
-    return buses_paths, chosen_X, chosen_T, chosen_L
+    return buses_paths_sorted, chosen_X, chosen_T, chosen_L
 
 def main():
 

@@ -17,9 +17,10 @@ if __name__ == "__main__":
     with open(base_directory + "/Solution/buses_paths.json", "r") as json_file:
         buses_paths = json.load(json_file)
 
-    for bus, paths in buses_paths.items():
+    for bus, movements in buses_paths.items():
         fig, ax = plt.subplots(figsize=(8, 6))
-        for idx, path in enumerate(paths):
+        for idx, info in enumerate(movements):
+            paths = info['path']
             ax.clear()
 
             # Draw nodes with different colors based on node types
@@ -52,9 +53,13 @@ if __name__ == "__main__":
                             mpatches.Patch(color='gray', label='Junction Node')]
             ax.legend(handles=legend_handles)
 
-            if idx == len(paths) - 1:
+            if idx == 0:
+                plt.pause(2)
+
+            if idx == len(movements) - 1:
                 edges = []
-                for path in paths:
+                for segment in movements:
+                    path = segment['path']
                     if len(path) > 2:
                         for i in range(len(path) - 1):
                             edges.append((path[i],path[i+1]))
@@ -62,9 +67,9 @@ if __name__ == "__main__":
                         edges.append(tuple(path))
                 nx.draw_networkx_edges(graph, pos, edgelist=edges, ax=ax, edge_color='r', width=2, arrows=False)
             else:
-                edges = list(zip(path, path[1:]))
+                edges = list(zip(paths, paths[1:]))
                 nx.draw_networkx_edges(graph, pos, edgelist=edges, ax=ax, edge_color='r', width=2, arrows=True)
             plt.pause(1)
     
-    input()
+    plt.show()
 
