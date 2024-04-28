@@ -1,21 +1,85 @@
-import random
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Vehicle Routing Problem with time window constraints using DOcplex
+
+This script allows the user to solve the Vehicle Routing Problem with time window constraints or
+VRPPDTW using the DOcplex solver.
+
+This is an implementation of the following paper:
+Desaulniers, G., Desrosiers, J., Erdmann, A., Solomon, M.M., & Soumis, F. (2002). 
+VRP with Pickup and Delivery. The Vehicle Routing Problem, 9, pp.225-242.
+"""
+__author__ = "Danial Chekani"
+__email__ = "danialchekani@arizona.edu"
+__status__ = "Dev"
+
+import copy
 import time
 from datetime import datetime
-from networkx import to_numpy_array
 import networkx as nx
-from Parsing_VRPPDTW import create_graph, get_vehicles, get_requests
-import itertools
+from networkx import DiGraph
+from Parsing import create_graph, get_vehicles, get_requests
 from docplex.mp.model import Model
-import numpy as np
 import json
 
-def get_time():
-    start_time = time.time()
-    start_time_str = datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')
-    return start_time_str
+def get_time() -> str:
+    """
+    A simple function to get current time in readable format
 
-def optimize_model(vehicles, requests, graph):
+    Returns
+    -------
+    current_time : str, YYYY:mm:dd HH:MM:SS
+    """
+    current_time : str
+    current_time = time.time()
+    current_time_str = datetime.fromtimestamp(current_time).strftime('%Y-%m-%d %H:%M:%S')
+    return current_time_str
 
+def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
+    """"
+    The main function to solve the Vehicle Routing Problem with Time Window Constraints
+
+    
+    Parameters
+    ----------
+    vehicles : dict
+        A dictionary where the keys are the vehicle IDs and the values 
+        are each vehicle's information in the following format:
+        (Origin_depot_ID, Destination_depot,ID, Capacity)
+
+    requests : dict
+        A dictionary where the keys are the request IDs and the values
+        are each request's information in the following format:
+        (Request_origin, Request_destination, Num_people_at_request, Earliest_departure_minutes,
+        Latest_departure_minutes, Departure_service_time, Earliest_arrival_minutes,
+        Latest_arrival_minutes, Arrival_service_time)
+
+    graph : Networkx Digraph
+        A graph storing the network's structure and travel times between nodes.
+
+    Returns
+    -------
+    buses_paths_sorted : dict
+        A dictionary where the keys are bus IDs and the values
+        are a list of travels the bus has made in order of travel.
+        Each travel is a dictionary in the following format:
+        {'origin_dest_ids' : tuple, (i,j), 'start_time' : str, HH:MM, 'finish_time' : str, HH:MM,
+         'start_load' : int, 'finish_load' : int, 'path' : list[int], 'status' : str}
+    chosen_X : dict
+        A dictionary where the keys are the bus IDs and the values
+        are the travel arcs chosen by the bus.
+    chosen_T : dict
+        A dictionary where the keys are the bus IDs and the values
+        are the times at which request i has been completed.
+    chosen_L : dict
+        A dictionary where the keys are the bus IDs and the values
+        are the loads that have changed after serving request i.
+    """
+
+    M = 1e6  # A large positive constant for linearizing
+    
     print("Started Process: " + get_time())
 
     K = list(vehicles.keys())
@@ -26,18 +90,27 @@ def optimize_model(vehicles, requests, graph):
     for request_id, request in requests.items():
         N_values.append(request[1])
 
+    """
+    Creating auxiliary lists P, D, N
+    Since P, D, N are simply pointers to geographical nodes they 
+    are created using the range function.
+
+    Since every bus can take every possible path, k notation for P, D, N
+    are omitted and each bus shares the same lists
+    """
     n = len(requests)
     P = list(range(n))
     D = list(range(n,2*n))
     N = list(range(2*n))
 
+    # Determining origin and destination index of each bus
     origin = 2*n
     destination = 2*n + 1
 
-    s = []
-    a = []
-    b = []
-    l = []
+    s = [] # Service time of each node in N. Assumed 0 at depots
+    a = [] # List of the beginning of arrival and departure windows.
+    b = [] # List of the end of arrival and departure windows.
+    l = [] # List of the loads at each node in N.
 
     for i in range(n):
         l.append(requests[i][2])
@@ -46,20 +119,22 @@ def optimize_model(vehicles, requests, graph):
         s.append(requests[i][5])
 
     for i in range(n):
-        l.append(-requests[i][2])
+        l.append(-requests[i][2]) # load of a bus changes by -d_i when delivering request i
         a.append(requests[i][6])
         b.append(requests[i][7])
         s.append(requests[i][8])
 
-    s.extend([0,0])
+    # Including values for depots
     a.extend([0,24*60])
     b.extend([0,24*60])
+    s.extend([0,0])
     l.extend([0,0])
 
     V = {}
     V_val = {}
     A = {}
 
+    # Creating dict of possible arcs for each bus
     for k in K:
         arcs = []
         V_val[k] = N_values + [vehicles[k][0], vehicles[k][1]]
@@ -70,26 +145,9 @@ def optimize_model(vehicles, requests, graph):
                     arcs.append((i,j))
         A[k] = arcs
 
-    print("Created V and A: " + get_time())
-
-    all_shortest_paths = dict(nx.all_pairs_dijkstra_path(graph, weight='weight'))
-    all_shortest_path_lengths = dict(nx.all_pairs_dijkstra_path_length(graph, weight='weight'))
-
-    shortest_paths_dict = {}
-    cost = {}
-
-    for source_node, paths in all_shortest_paths.items():
-        shortest_paths_dict[source_node] = {}
-        cost[source_node] = {}
-        for target_node, path in paths.items():
-            shortest_paths_dict[source_node][target_node] = path
-            cost[source_node][target_node] = all_shortest_path_lengths[source_node][target_node]
-
-    print("Calculated Costs: " + get_time())
-
-    # model = Model("VRPPDTW", solver='cplex_local')
     model = Model("VRPPDTW")
 
+    # Decision variable X stores all the possible arcs for each bus
     X = {}
     cnt = 0
     for k, arcs in A.items():
@@ -98,6 +156,7 @@ def optimize_model(vehicles, requests, graph):
             X[arc, k] = model.binary_var(name=f'X_{i}_{j}_{k}_{cnt}')
             cnt += 1
 
+    # Decision variable T for storing time to serve request i by bus k
     T = {}
     cnt = 0
     for k in K:
@@ -105,6 +164,7 @@ def optimize_model(vehicles, requests, graph):
             T[i, k] = model.continuous_var(name=f't_ik_{i}_{k}_{cnt}')
             cnt += 1
 
+    # Decision variable L for storing load change after serving request i by bus k
     L = {}
     cnt = 0
     for k in K:
@@ -112,171 +172,147 @@ def optimize_model(vehicles, requests, graph):
             L[i, k] = model.continuous_var(name=f'lk_{i}_{k}_{cnt}')
             cnt += 1
 
+    print("Created variables: " + get_time())
+
+    # Use Dijkstra to get shortest paths
+    all_shortest_paths = dict(nx.all_pairs_dijkstra_path(graph, weight='weight'))
+    all_shortest_path_lengths = dict(nx.all_pairs_dijkstra_path_length(graph, weight='weight'))
+
+    shortest_paths_dict = {}
+    t = {}
+
+    # Calculate the shortest path and shortest path t between each two nodes
+    for source_node, paths in all_shortest_paths.items():
+        shortest_paths_dict[source_node] = {}
+        t[source_node] = {}
+        for target_node, path in paths.items():
+            shortest_paths_dict[source_node][target_node] = path
+            t[source_node][target_node] = all_shortest_path_lengths[source_node][target_node]
+
+    print("Calculated Costs: " + get_time())
+
+    # Assuming cost is equal to travel time. Can be adjusted based on requirements
+    cost = copy.deepcopy(t)
+
     # Define the objective function
     objective = model.sum(cost[V_val[k][i]][V_val[k][j]] * X[(i,j), k] 
                           for (i,j) in A[k] for k in K)
 
-    # Set the objective function as minimization
     model.minimize(objective)
 
-    print("Defined Model: " + get_time())
-
+    # Constraint 9.2
     for i in P:
         model.add_constraint(model.sum(X[(i,j), k]
-                                    #    for j in N.union(vehicles[k][2])
-                                    #    for j in N + [vehicles[k][2]]
-                                       for j in N + [destination]
-                                       if i != j
+                                       for j in N + [destination] if i != j
                                        for k in K) == 1,
                                        ctname=f'const_9_2_{i}')
-        
+
+    # Constraint 9.3
     for k in K:
         for i in P:
             model.add_constraint(model.sum(X[(i, j), k] for j in N if j != i) -
                                 model.sum(X[(j, n+i), k] for j in N if j != n+i) == 0,
                                 ctname=f'const_9_3_{k}_{i}')
-        
-    # for k in K:
-    #     sum_term1 = 0
-    #     sum_term2 = 0
-    #     # for i in P:
-    #     for i in range(n):
-    #         # for j in N:
-    #         for j in range(2*n):
-    #             # if i!=j:
-    #                 sum_term1 += X[(i,j), k]
-    #                 sum_term2 += X[(j,n+i), k]
-    #         model.add_constraint(sum_term1 - sum_term2 == 0, 
-    #                             ctname=f'const_9_3_{k}_{i}')
 
-    # model.add_constraint(X[(2,4), 0] == 1, ctname='asdasd')
-    # model.add_constraint(X[(5,1), 0] == 1, ctname='asdasd')
-
-    # for k in K:
-    #     # Flow from depot to customers
-    #     model.add_constraint(
-    #         model.sum(X[(2*n, j), k] for j in range(n)) == 1,
-    #         ctname=f'flow_from_depot_{k}'
-    #     )
-
-    #     # Flow to depot from customers
-    #     model.add_constraint(
-    #         model.sum(X[(i, 2*n+1), k] for i in range(n)) == 1,
-    #         ctname=f'flow_to_depot_{k}'
-    #     )
-
-    #     # Flow conservation
-    #     for j in range(n):
-    #         model.add_constraint(
-    #             model.sum(X[(i, j), k] for i in range(2*n+2) if i != j) ==
-    #             model.sum(X[(j, i), k] for i in range(2*n+2) if i != j),
-    #             ctname=f"flow_conservation_{k}_{j}"
-    #         )
-
+    # Constraint 9.4
     for k in K:
-        model.add_constraint(model.sum(
-                                    # X[(vehicles[k][1],j), k]
-                                    X[(origin,j), k]
-                                    #    for j in P.union(vehicles[k][2])) == 1,
-                                    #    for j in P + [vehicles[k][2]]) == 1,
+        model.add_constraint(model.sum(X[(origin,j), k]
                                     for j in P + [destination]) == 1,
                                     ctname=f'const_9_4_{k}')
-        
+
+    # Constraint 9.5
     for k in K:
         for j in N:
-            model.add_constraint(sum(X[(i, j), k] for i in 
-                                     N + [origin] if i != j)
-                                  - sum(X[(j, i), k] for i in 
-                                        N + [destination] if i != j) 
+            model.add_constraint(sum(X[(i, j), k] for i in N + [origin] if i != j)
+                                  - sum(X[(j, i), k] for i in N + [destination] if i != j) 
                                   == 0, ctname=f"const_9_5_{k}_{j}")
-        
+
+    # Constraint 9.6
     for k in K:
-        model.add_constraint(model.sum(
-                                    # X[(i,vehicles[k][2]), k]
-                                    X[(i,destination), k]
-                                    #    for i in D.union(vehicles[k][1])) == 1,
-                                    #    for i in D + [vehicles[k][1]]) == 1,
+        model.add_constraint(model.sum(X[(i,destination), k]
                                        for i in D + [origin]) == 1,
                                        ctname=f'const_9_6_{k}')
-        
-    # for k in K:
-    #     for (i,j) in A[k]:
-    #         model.add_constraint(X[(i,j), k] * (T[i, k] + s[i] + 
-    #                                                 cost[V_val[k][i]][V_val[k][j]] - T[j, k]) 
-    #                              <= 0, ctname=f'const_9_7_{k}_{i}_{j}')
 
+    # Constraint 9.7
+    # Linearized to make it convex
+    # T_ik + s_i + t_i,n+i,k - T_jk <= (1 - X_ijk) * M
     for k in K:
         for (i, j) in A[k]:
-            M2 = 1e6
             model.add_constraint(
-                T[i, k] + s[i] + cost[V_val[k][i]][V_val[k][j]] - T[j, k] <= (1 - X[(i, j), k]) * M2,
+                T[i, k] + s[i] + t[V_val[k][i]][V_val[k][j]] - T[j, k] 
+                <= (1 - X[(i, j), k]) * M,
                 ctname=f'const_9_7a_{k}_{i}_{j}'
             )
 
+    # Constraint 9.8
     for k in K:
         for i in V[k]:
             model.add_constraint(T[i, k] >= a[i], ctname=f'const_9_8_lower_{k}_{i}')
             model.add_constraint(T[i, k] <= b[i], ctname=f'const_9_8_upper_{k}_{i}')
 
+    # Constraint 9.9
     for k in K:
         for i in P:
-            model.add_constraint(T[i, k] + cost[V_val[k][i]][V_val[k][n+i]] <= 
+            model.add_constraint(T[i, k] + t[V_val[k][i]][V_val[k][n+i]] <= 
                                  T[n+i, k], ctname=f'const_9_9_{k}_{i}')
-            
-    # for k in K:
-    #     for (i,j) in A[k]:
-    #         model.add_constraint(X[(i,j), k] * (L[i, k] + l[j] - L[j, k]) == 0, ctname=f'const_9_10_{k}_{i}_{j}')
-            
+
+    # Constraint 9.10
+    # Linearized to make it convex
+    # x_ijk = 0 + alpha
+    # L_ik + l_i + l_jk <= M * beta
+    # L_ik + l_i + l_jk >= -M * beta
+    # alpha + beta <= 1
     for k in K:
         for (i, j) in A[k]:
-            alpha1 = model.binary_var(name=f'alpha1_{k}_{i}_{j}')
-            alpha2 = model.binary_var(name=f'alpha2_{k}_{i}_{j}')
-            M = 1e6  # A large positive constant
+            alpha = model.binary_var(name=f'alpha_{k}_{i}_{j}')
+            beta = model.binary_var(name=f'beta_{k}_{i}_{j}')
             model.add_constraint(
-                X[(i,j), k] <= M * alpha1,
+                X[(i,j), k] == 0 + alpha,
                 ctname=f'const_9_10a_{k}_{i}_{j}'
             )
             model.add_constraint(
-                L[i, k] + l[j] - L[j, k] <= M * alpha2 ,
+                L[i, k] + l[j] - L[j, k] <= M * beta,
                 ctname=f'const_9_10b_{k}_{i}_{j}'
             )
             model.add_constraint(
-                alpha1 + alpha2 <= 1,
+                L[i, k] + l[j] - L[j, k] >= (-M) * beta,
                 ctname=f'const_9_10c_{k}_{i}_{j}'
             )
-            # model.add_constraint(
-            #     L[i, k] + l[j] - L[j, k] >= 0,
-            #     ctname=f'const_9_10d_{k}_{i}_{j}'
-            # )
+            model.add_constraint(
+                alpha + beta <= 1,
+                ctname=f'const_9_10d_{k}_{i}_{j}'
+            )
 
+    # Constraint 9.11
     for k in K:
         for i in P:
             model.add_constraint(L[i, k] >= l[i], ctname=f'const_9_11_lower_{k}_{i}')
             model.add_constraint(L[i, k] <= vehicles[k][2], ctname=f'const_9_11_upper_{k}_{i}')
 
+    # Constraint 9.12
     for k in K:
         for z in D:
             i = z - n
             model.add_constraint(L[z, k] >= 0, ctname=f'const_9_12_lower_{k}_{i}')
             model.add_constraint(L[z, k] <= vehicles[k][2] - l[i], ctname=f'const_9_12_upper_{k}_{i}')
 
+    # Constraint 9.13
     for k in K:
         model.add_constraint(L[origin, k] == 0, ctname=f'const_9_13_{k}')
 
-        ##
-        model.add_constraint(L[destination, k] == 0, ctname=f'const_9_15_{k}')
-
+    # Constraint 9.14
     for k in K:
         for (i,j) in A[k]:
             model.add_constraint(X[(i,j), k] >= 0, ctname=f'const_9_14_{k}_{i}_{j}')
 
     print("Model Sovle Start: " + get_time())
 
+    # Solving the model
     solution = model.solve()
 
     print("Model Sovle Finish: " + get_time())
 
-    chosen_xijk = {k: [] for k in K}
+    # Creating output dicts
     chosen_X = {k: [] for k in K}
     chosen_T = {k: [] for k in K}
     chosen_L = {k: [] for k in K}
@@ -287,11 +323,15 @@ def optimize_model(vehicles, requests, graph):
     if solution:
         for k in K:
             for (i, j) in A[k]:
+                # Choosing arcs that are 1
                 var_value = solution.get_value(X[(i,j), k])
                 if var_value > 0.9:
+
+                    # Converting time to HH:MM
                     start_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[i, k])), 60))
                     finish_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[j, k])), 60))
 
+                    # Assigning the status
                     if V[k][j] < n:
                         status = "Picking Up Request " + str(j) + " at Node " + str(V_val[k][j])
                     elif V[k][j] < 2*n:
@@ -299,22 +339,28 @@ def optimize_model(vehicles, requests, graph):
                     elif V[k][j] == 2*n + 1:
                         status = "Going to Destination Depot " + str(V_val[k][j])
                     
-                    buses_paths[k][V[k][i]] = {"origin_dest_ids" : (V[k][i], V[k][j]), "start_time" : start_time_string,
+                    # Creating the buses_path dict
+                    buses_paths[k][V[k][i]] = {"origin_dest_ids" : (V[k][i], V[k][j]), 
+                                         "start_time" : start_time_string,
                                          "finish_time" : finish_time_string, 
-                                         "start_load" : solution.get_value(L[i, k]),
-                                         "finish_load" : solution.get_value(L[j, k]),
+                                         "start_load" : round(solution.get_value(L[i, k])),
+                                         "finish_load" : round(solution.get_value(L[j, k])),
                                          "path" : shortest_paths_dict[V_val[k][i]][V_val[k][j]],
                                          "status" : status}
-                    chosen_xijk[k].append((V[k][i], V[k][j]))
+                    
+                    # Storing chosen arcs from X
                     chosen_X[k].append((V_val[k][i], V_val[k][j]))
 
+            # Storing T values in HH:MM
             for i in range(len(V[k])):
                 time_string = "{}:{}".format(*divmod(round(solution.get_value(T[i, k])), 60))
                 chosen_T[k].append(time_string)
 
+            # Storing L values
             for i in range(len(V[k])):
                 chosen_L[k].append(round(solution.get_value(L[i, k])))
 
+            # Sorting arcs based on values of (i,j)
             next_i = 2*n
             while len(buses_paths[k]) > 0:
                 item = buses_paths[k].pop(next_i)
@@ -330,24 +376,30 @@ def optimize_model(vehicles, requests, graph):
 
 def main():
 
-    base_directory = "Inputs/VRPPDTW/"
-    vehicles = get_vehicles(base_directory + "Vehicles.txt")
-    requests = get_requests(base_directory + "Requests.txt")
-    graph = create_graph(base_directory + "Nodes.txt",base_directory + "Edges.txt", requests)
+    # Specify the folder name under the Inputs folder
+    problem_dir = input("\nEnter folder name of the problem\n")
+
+    # Read input data including vehicles, request, nodes and edges
+    base_directory = "Samples/" + problem_dir + "/"
+    vehicles = get_vehicles(base_directory + "Vehicles.csv")
+    requests = get_requests(base_directory + "Requests.csv")
+    graph = create_graph(base_directory + "Nodes.csv",base_directory + "Edges.csv", requests)
 
     buses_paths, chosen_X, chosen_T, chosen_L = optimize_model(vehicles, requests, graph)
 
-    with open(base_directory + "/Solution/buses_paths.json", "w") as json_file:
-        json.dump(buses_paths, json_file, indent=4)
+    # If model is solved, the results are stored in json files
+    if not (len(buses_paths) == 0 or len(buses_paths[0]) == 0):
+        with open(base_directory + "/Solution/buses_paths.json", "w") as json_file:
+            json.dump(buses_paths, json_file, indent=4)
 
-    with open(base_directory + "/Solution/chosen_x_ijk.json", "w") as json_file:
-        json.dump(chosen_X, json_file, indent=4)
+        with open(base_directory + "/Solution/chosen_x_ijk.json", "w") as json_file:
+            json.dump(chosen_X, json_file, indent=4)
 
-    with open(base_directory + "/Solution/chosen_t_ik.json", "w") as json_file:
-        json.dump(chosen_T, json_file, indent=4)
+        with open(base_directory + "/Solution/chosen_t_ik.json", "w") as json_file:
+            json.dump(chosen_T, json_file, indent=4)
 
-    with open(base_directory + "/Solution/chosen_l_ik.json", "w") as json_file:
-        json.dump(chosen_L, json_file, indent=4)
+        with open(base_directory + "/Solution/chosen_l_ik.json", "w") as json_file:
+            json.dump(chosen_L, json_file, indent=4)
 
 if __name__ == "__main__":
     main()
