@@ -1,0 +1,3 @@
+Request_ID,Origin,Destination,Load,Earliest_Departure,Latest_Departure,Service_Time_Origin,Earliest_Arrival,Latest_Arrival,Service_Time_Destination
+0,1,6,4,7,8,0,8:30,9,0
+1,4,3,2,7:30,8:30,0,8:30,9,0
