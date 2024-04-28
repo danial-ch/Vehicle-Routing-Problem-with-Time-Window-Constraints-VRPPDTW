@@ -1,9 +1,10 @@
+import csv
 import networkx as nx
 
 def get_full_graph(base_directory):
-    nodes_file = base_directory + "Nodes.txt"
-    edges_file = base_directory + "Edges.txt"
-    requests = get_requests(base_directory + "Requests.txt")
+    nodes_file = base_directory + "Nodes.csv"
+    edges_file = base_directory + "Edges.csv"
+    requests = get_requests(base_directory + "Requests.csv")
     graph = create_graph(nodes_file, edges_file, requests)
 
     return graph, requests
@@ -27,15 +28,13 @@ def convert_to_minutes(time_str):
 def read_nodes(nodes_file, requests):
     nodes = {}
     with open(nodes_file, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if line.startswith('#') or not line.strip():
-                continue  # Ignore comment lines and empty lines
-            data = line.split('|')
-            node_id = int(data[0])
-            x = float(data[1])
-            y = float(data[2])
-            name = data[3] if len(data) > 3 else None
+        reader = csv.reader(file)
+        next(reader, None)
+        for i, line in enumerate(reader):
+            node_id = int(line[0])
+            x = float(line[1])
+            y = float(line[2])
+            name = line[3] if len(line) > 3 else None
             node = {'node_id': node_id, 'x': x, 'y': y, 'name': name, 'node_type' : 'Junction Node'}
             nodes[node_id] = node
 
@@ -49,12 +48,10 @@ def read_nodes(nodes_file, requests):
 def read_edges(filename):
     edges = {}
     with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if line.startswith('#') or not line.strip():
-                continue  # Ignore comment lines and empty lines
-            data = line.split('|')
-            edge_id, source, target, weight = data
+        reader = csv.reader(file)
+        next(reader, None)
+        for i, line in enumerate(reader):
+            edge_id, source, target, weight = line
             edges[edge_id] = {'edge_id': edge_id, 'origin': int(source), 
                               'destination': int(target), 'travel_time': float(weight)}
     return edges
@@ -79,21 +76,19 @@ def create_graph(nodes_file, edges_file, requests):
 def get_requests(filename):
     requests = {}
     with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if line.startswith('#') or not line.strip():
-                continue  # Ignore comment lines and empty lines
-            data = line.split('|')
-            request_id = int(data[0])
-            origin = int(data[1])
-            destination = int(data[2])
-            count = int(data[3])
-            earliest_departure_o = convert_to_minutes(data[4])
-            latest_departure_o = convert_to_minutes(data[5])
-            service_time_o = convert_to_minutes(data[6])
-            earliest_departure_d = convert_to_minutes(data[7])
-            latest_departure_d = convert_to_minutes(data[8])
-            service_time_d = convert_to_minutes(data[9])
+        reader = csv.reader(file)
+        next(reader, None)
+        for i, line in enumerate(reader):
+            request_id = int(line[0])
+            origin = int(line[1])
+            destination = int(line[2])
+            count = int(line[3])
+            earliest_departure_o = convert_to_minutes(line[4])
+            latest_departure_o = convert_to_minutes(line[5])
+            service_time_o = convert_to_minutes(line[6])
+            earliest_departure_d = convert_to_minutes(line[7])
+            latest_departure_d = convert_to_minutes(line[8])
+            service_time_d = convert_to_minutes(line[9])
             requests[request_id] = (origin, destination, count, earliest_departure_o, 
                                     latest_departure_o, service_time_o, earliest_departure_d,
                                     latest_departure_d, service_time_d)
@@ -102,14 +97,12 @@ def get_requests(filename):
 def get_vehicles(filename):
     buses = {}
     with open(filename, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if line.startswith('#') or not line.strip():
-                continue  # Ignore comment lines and empty lines
-            data = line.split('|')
-            bus_id = int(data[0])
-            origin_id = int(data[1])
-            destination_id = int(data[2])
-            capacity = int(data[3])
+        reader = csv.reader(file)
+        next(reader, None)
+        for i, line in enumerate(reader):
+            bus_id = int(line[0])
+            origin_id = int(line[1])
+            destination_id = int(line[2])
+            capacity = int(line[3])
             buses[bus_id] = (origin_id, destination_id, capacity)
     return buses
