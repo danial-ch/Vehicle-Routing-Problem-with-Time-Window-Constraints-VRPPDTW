@@ -5,7 +5,8 @@ def get_full_graph(base_directory):
     nodes_file = base_directory + "Nodes.csv"
     edges_file = base_directory + "Edges.csv"
     requests = get_requests(base_directory + "Requests.csv")
-    graph = create_graph(nodes_file, edges_file, requests)
+    vehicles = get_vehicles(base_directory + "Vehicles.csv")
+    graph = create_graph(nodes_file, edges_file, requests, vehicles)
 
     return graph, requests
 
@@ -25,7 +26,7 @@ def convert_to_minutes(time_str):
     total_minutes = hours * 60 + minutes
     return total_minutes
 
-def read_nodes(nodes_file, requests):
+def read_nodes(nodes_file, requests, vehicles):
     nodes = {}
     with open(nodes_file, 'r') as file:
         reader = csv.reader(file)
@@ -42,7 +43,12 @@ def read_nodes(nodes_file, requests):
         origin, destination, count, _, _, _, _, _, _ = request
         nodes[origin]['node_type'] = 'Pickup Node'
         nodes[destination]['node_type'] = 'Delivery Node'
-        
+
+    for vehicle_id, vehicle in vehicles.items():
+        origin, destination, _ = vehicle
+        nodes[origin]['node_type'] = 'Depot Node'
+        nodes[destination]['node_type'] = 'Depot Node'
+
     return nodes
 
 def read_edges(filename):
@@ -56,10 +62,10 @@ def read_edges(filename):
                               'destination': int(target), 'travel_time': float(weight)}
     return edges
 
-def create_graph(nodes_file, edges_file, requests):
+def create_graph(nodes_file, edges_file, requests, vehicles):
     G = nx.DiGraph()
     
-    nodes = read_nodes(nodes_file, requests)
+    nodes = read_nodes(nodes_file, requests, vehicles)
     edges = read_edges(edges_file)
     
     for index, (key, value) in enumerate(nodes.items(), start=0):

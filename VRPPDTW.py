@@ -346,6 +346,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
                                          "start_load" : round(solution.get_value(L[i, k])),
                                          "finish_load" : round(solution.get_value(L[j, k])),
                                          "path" : shortest_paths_dict[V_val[k][i]][V_val[k][j]],
+                                         "path_cost" : t[V_val[k][i]][V_val[k][j]],
                                          "status" : status}
                     
                     # Storing chosen arcs from X
@@ -377,13 +378,14 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
 def main():
 
     # Specify the folder name under the Inputs folder
-    problem_dir = input("\nEnter folder name of the problem\n")
+    print("-------------")
+    problem_dir = input("Enter folder name of the problem\n")
 
     # Read input data including vehicles, request, nodes and edges
     base_directory = "Samples/" + problem_dir + "/"
     vehicles = get_vehicles(base_directory + "Vehicles.csv")
     requests = get_requests(base_directory + "Requests.csv")
-    graph = create_graph(base_directory + "Nodes.csv",base_directory + "Edges.csv", requests)
+    graph = create_graph(base_directory + "Nodes.csv",base_directory + "Edges.csv", requests, vehicles)
 
     buses_paths, chosen_X, chosen_T, chosen_L = optimize_model(vehicles, requests, graph)
 
