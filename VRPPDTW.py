@@ -20,9 +20,11 @@ import time
 from datetime import datetime
 import networkx as nx
 from networkx import DiGraph
-from Parsing import create_graph, get_vehicles, get_requests
+from Parsing import get_full_graph
 from docplex.mp.model import Model
 import json
+
+from Utils import get_bus_movement, get_dirs, get_status, save_json, shortest_path_and_lengths_tt_and_distance
 
 def get_time() -> str:
     """
@@ -37,7 +39,25 @@ def get_time() -> str:
     current_time_str = datetime.fromtimestamp(current_time).strftime('%Y-%m-%d %H:%M:%S')
     return current_time_str
 
-def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
+def get_path_cost(travel_time, distance, cost_factors):
+
+    #TODO design and unpack the cost_factors based on own formulas
+    alpha, beta, const = cost_factors
+
+    return (travel_time * alpha) + (distance * beta) + const
+
+def get_cost_matrix(travel_time_matrix, distance_matrix, cost_factors):
+
+    cost = []
+    for i in range(len(travel_time_matrix)):
+        cost.append([])
+        for j in range(len(travel_time_matrix[i])):
+            result = get_path_cost(travel_time_matrix[i][j], distance_matrix[i][j], cost_factors)
+            cost[i].append(result)
+
+    return cost
+
+def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_factors : list) -> dict:
     """"
     The main function to solve the Vehicle Routing Problem with Time Window Constraints
 
@@ -78,7 +98,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
         are the loads that have changed after serving request i.
     """
 
-    M = 1e6  # A large positive constant for linearizing
+    M = 5e3  # A large positive constant for linearizing
     
     print("Started Process: " + get_time())
 
@@ -174,25 +194,11 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
 
     print("Created variables: " + get_time())
 
-    # Use Dijkstra to get shortest paths
-    all_shortest_paths = dict(nx.all_pairs_dijkstra_path(graph, weight='weight'))
-    all_shortest_path_lengths = dict(nx.all_pairs_dijkstra_path_length(graph, weight='weight'))
+    shortest_paths_tt, t, shortest_paths_dist, d = shortest_path_and_lengths_tt_and_distance(graph)
 
-    shortest_paths_dict = {}
-    t = {}
-
-    # Calculate the shortest path and shortest path t between each two nodes
-    for source_node, paths in all_shortest_paths.items():
-        shortest_paths_dict[source_node] = {}
-        t[source_node] = {}
-        for target_node, path in paths.items():
-            shortest_paths_dict[source_node][target_node] = path
-            t[source_node][target_node] = all_shortest_path_lengths[source_node][target_node]
-
+    cost = get_cost_matrix(t, d, cost_factors)
+    
     print("Calculated Costs: " + get_time())
-
-    # Assuming cost is equal to travel time. Can be adjusted based on requirements
-    cost = copy.deepcopy(t)
 
     # Define the objective function
     objective = model.sum(cost[V_val[k][i]][V_val[k][j]] * X[(i,j), k] 
@@ -322,6 +328,11 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
 
     if solution:
         for k in K:
+
+            total_bus_cost = 0
+            total_bus_travel_time = 0
+            total_bus_dist = 0
+        
             for (i, j) in A[k]:
                 # Choosing arcs that are 1
                 var_value = solution.get_value(X[(i,j), k])
@@ -331,23 +342,25 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
                     start_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[i, k])), 60))
                     finish_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[j, k])), 60))
 
-                    # Assigning the status
-                    if V[k][j] < n:
-                        status = "Picking Up Request " + str(j) + " at Node " + str(V_val[k][j])
-                    elif V[k][j] < 2*n:
-                        status = "Delivering Request " + str(j-n) + " at Node " + str(V_val[k][j])
-                    elif V[k][j] == 2*n + 1:
-                        status = "Going to Destination Depot " + str(V_val[k][j])
+                    status = get_status(V[k][j], V_val[k][j], n)
+
+                    path_cost = cost[V_val[k][i]][V_val[k][j]]
+                    total_bus_cost += path_cost
+                    bus_tt = t[V_val[k][i]][V_val[k][j]]
+                    total_bus_travel_time += bus_tt
+                    bus_dist = d[V_val[k][i]][V_val[k][j]]
+                    total_bus_dist += bus_dist
                     
                     # Creating the buses_path dict
-                    buses_paths[k][V[k][i]] = {"origin_dest_ids" : (V[k][i], V[k][j]), 
-                                         "start_time" : start_time_string,
-                                         "finish_time" : finish_time_string, 
-                                         "start_load" : round(solution.get_value(L[i, k])),
-                                         "finish_load" : round(solution.get_value(L[j, k])),
-                                         "path" : shortest_paths_dict[V_val[k][i]][V_val[k][j]],
-                                         "path_cost" : t[V_val[k][i]][V_val[k][j]],
-                                         "status" : status}
+                    movement = get_bus_movement(V[k][i], V[k][j], start_time_string,
+                                                finish_time_string, round(solution.get_value(L[i, k])),
+                                                round(solution.get_value(L[j, k])),
+                                                shortest_paths_tt[V_val[k][i]][V_val[k][j]],
+                                                path_cost,
+                                                bus_tt,
+                                                bus_dist,
+                                                status)
+                    buses_paths[k][V[k][i]] = movement
                     
                     # Storing chosen arcs from X
                     chosen_X[k].append((V_val[k][i], V_val[k][j]))
@@ -368,6 +381,10 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
                 next_i = item["origin_dest_ids"][1]
                 buses_paths_sorted[k].append(item)
 
+            buses_paths_sorted[k][1]["Total_Cost"] = total_bus_cost
+            buses_paths_sorted[k][1]["Total_Travel_time"] = total_bus_travel_time
+            buses_paths_sorted[k][1]["Total_Distance"] = total_bus_dist
+
         print("Objective value:", model.objective_value)
 
     else:
@@ -377,31 +394,18 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph) -> dict:
 
 def main():
 
-    # Specify the folder name under the Inputs folder
-    print("-------------")
-    problem_dir = input("Enter folder name of the problem\n")
+    base_directory, solution_dir = get_dirs()
+    graph, requests, vehicles = get_full_graph(base_directory)
 
-    # Read input data including vehicles, request, nodes and edges
-    base_directory = "Samples/" + problem_dir + "/"
-    vehicles = get_vehicles(base_directory + "Vehicles.csv")
-    requests = get_requests(base_directory + "Requests.csv")
-    graph = create_graph(base_directory + "Nodes.csv",base_directory + "Edges.csv", requests, vehicles)
-
-    buses_paths, chosen_X, chosen_T, chosen_L = optimize_model(vehicles, requests, graph)
-
+    buses_paths, chosen_x_ijk, chosen_t_ik, chosen_l_ik = \
+    optimize_model(vehicles, requests, graph, [0.6, 0.5, 5])
+    
     # If model is solved, the results are stored in json files
     if not (len(buses_paths) == 0 or len(buses_paths[0]) == 0):
-        with open(base_directory + "/Solution/buses_paths.json", "w") as json_file:
-            json.dump(buses_paths, json_file, indent=4)
-
-        with open(base_directory + "/Solution/chosen_x_ijk.json", "w") as json_file:
-            json.dump(chosen_X, json_file, indent=4)
-
-        with open(base_directory + "/Solution/chosen_t_ik.json", "w") as json_file:
-            json.dump(chosen_T, json_file, indent=4)
-
-        with open(base_directory + "/Solution/chosen_l_ik.json", "w") as json_file:
-            json.dump(chosen_L, json_file, indent=4)
+        save_json(solution_dir, "buses_paths", buses_paths)
+        save_json(solution_dir, "chosen_x_ijk", chosen_x_ijk)
+        save_json(solution_dir, "chosen_t_ik", chosen_t_ik)
+        save_json(solution_dir, "chosen_l_ik", chosen_l_ik)
 
 if __name__ == "__main__":
     main()

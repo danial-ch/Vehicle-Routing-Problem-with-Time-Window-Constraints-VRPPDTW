@@ -1,0 +1,247 @@
+{
+    "0": [
+        {
+            "origin_dest_ids": [
+                10,
+                1
+            ],
+            "start_time": "0:0",
+            "finish_time": "6:0",
+            "start_load": 0,
+            "finish_load": 1,
+            "path": [
+                10,
+                11,
+                12,
+                2,
+                3
+            ],
+            "path_cost": 19.75,
+            "travel_time": 16.0,
+            "travel_distance": 10.3,
+            "status": "Picking Up Request 1 at Node 3"
+        },
+        {
+            "origin_dest_ids": [
+                1,
+                4
+            ],
+            "start_time": "6:0",
+            "finish_time": "7:40",
+            "start_load": 1,
+            "finish_load": 3,
+            "path": [
+                3,
+                13,
+                14,
+                6
+            ],
+            "path_cost": 12.95,
+            "travel_time": 9.5,
+            "travel_distance": 4.5,
+            "status": "Picking Up Request 4 at Node 6",
+            "Total_Cost": 106.35000000000001,
+            "Total_Travel_time": 69.0,
+            "Total_Distance": 39.900000000000006
+        },
+        {
+            "origin_dest_ids": [
+                4,
+                3
+            ],
+            "start_time": "7:40",
+            "finish_time": "7:52",
+            "start_load": 3,
+            "finish_load": 5,
+            "path": [
+                6,
+                7,
+                4
+            ],
+            "path_cost": 10.65,
+            "travel_time": 6.5,
+            "travel_distance": 3.5,
+            "status": "Picking Up Request 3 at Node 4"
+        },
+        {
+            "origin_dest_ids": [
+                3,
+                9
+            ],
+            "start_time": "7:52",
+            "finish_time": "8:10",
+            "start_load": 5,
+            "finish_load": 3,
+            "path": [
+                4,
+                5,
+                8,
+                11,
+                9
+            ],
+            "path_cost": 15.9,
+            "travel_time": 12.5,
+            "travel_distance": 6.8,
+            "status": "Delivering Request 4 at Node 9"
+        },
+        {
+            "origin_dest_ids": [
+                9,
+                8
+            ],
+            "start_time": "8:10",
+            "finish_time": "8:28",
+            "start_load": 3,
+            "finish_load": 1,
+            "path": [
+                9,
+                11,
+                12
+            ],
+            "path_cost": 14.25,
+            "travel_time": 10.0,
+            "travel_distance": 6.5,
+            "status": "Delivering Request 3 at Node 12"
+        },
+        {
+            "origin_dest_ids": [
+                8,
+                2
+            ],
+            "start_time": "8:28",
+            "finish_time": "8:40",
+            "start_load": 1,
+            "finish_load": 5,
+            "path": [
+                12,
+                2,
+                15
+            ],
+            "path_cost": 8.4,
+            "travel_time": 4.0,
+            "travel_distance": 2.0,
+            "status": "Picking Up Request 2 at Node 15"
+        },
+        {
+            "origin_dest_ids": [
+                2,
+                7
+            ],
+            "start_time": "8:40",
+            "finish_time": "12:0",
+            "start_load": 5,
+            "finish_load": 1,
+            "path": [
+                15,
+                2
+            ],
+            "path_cost": 7.25,
+            "travel_time": 2.5,
+            "travel_distance": 1.5,
+            "status": "Delivering Request 2 at Node 2"
+        },
+        {
+            "origin_dest_ids": [
+                7,
+                6
+            ],
+            "start_time": "12:0",
+            "finish_time": "12:17",
+            "start_load": 1,
+            "finish_load": 0,
+            "path": [
+                2,
+                3,
+                13,
+                14
+            ],
+            "path_cost": 11.35,
+            "travel_time": 7.0,
+            "travel_distance": 4.3,
+            "status": "Delivering Request 1 at Node 14"
+        },
+        {
+            "origin_dest_ids": [
+                6,
+                11
+            ],
+            "start_time": "12:17",
+            "finish_time": "24:0",
+            "start_load": 0,
+            "finish_load": 0,
+            "path": [
+                14,
+                13
+            ],
+            "path_cost": 5.85,
+            "travel_time": 1.0,
+            "travel_distance": 0.5,
+            "status": "Going to Destination Depot 13"
+        }
+    ],
+    "1": [
+        {
+            "origin_dest_ids": [
+                10,
+                0
+            ],
+            "start_time": "0:0",
+            "finish_time": "6:0",
+            "start_load": 0,
+            "finish_load": 3,
+            "path": [
+                7,
+                4,
+                5,
+                8,
+                11,
+                10,
+                0
+            ],
+            "path_cost": 18.7,
+            "travel_time": 15.5,
+            "travel_distance": 8.8,
+            "status": "Picking Up Request 0 at Node 0"
+        },
+        {
+            "origin_dest_ids": [
+                0,
+                5
+            ],
+            "start_time": "6:0",
+            "finish_time": "11:0",
+            "start_load": 3,
+            "finish_load": 0,
+            "path": [
+                0,
+                9
+            ],
+            "path_cost": 7.8,
+            "travel_time": 3.0,
+            "travel_distance": 2.0,
+            "status": "Delivering Request 0 at Node 9",
+            "Total_Cost": 34.05,
+            "Total_Travel_time": 21.5,
+            "Total_Distance": 12.3
+        },
+        {
+            "origin_dest_ids": [
+                5,
+                11
+            ],
+            "start_time": "11:0",
+            "finish_time": "24:0",
+            "start_load": 0,
+            "finish_load": 0,
+            "path": [
+                9,
+                11,
+                10
+            ],
+            "path_cost": 7.55,
+            "travel_time": 3.0,
+            "travel_distance": 1.5,
+            "status": "Going to Destination Depot 10"
+        }
+    ]
+}

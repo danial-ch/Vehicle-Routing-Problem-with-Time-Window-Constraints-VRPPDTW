@@ -2,13 +2,14 @@ import csv
 import networkx as nx
 
 def get_full_graph(base_directory):
+    # Read input data including vehicles, request, nodes and edges
     nodes_file = base_directory + "Nodes.csv"
     edges_file = base_directory + "Edges.csv"
     requests = get_requests(base_directory + "Requests.csv")
     vehicles = get_vehicles(base_directory + "Vehicles.csv")
     graph = create_graph(nodes_file, edges_file, requests, vehicles)
 
-    return graph, requests
+    return graph, requests, vehicles
 
 def convert_to_minutes(time_str):
     # Split the string into hours and minutes
@@ -57,9 +58,10 @@ def read_edges(filename):
         reader = csv.reader(file)
         next(reader, None)
         for i, line in enumerate(reader):
-            edge_id, source, target, weight = line
+            edge_id, source, target, travel_time, distance = line
             edges[edge_id] = {'edge_id': edge_id, 'origin': int(source), 
-                              'destination': int(target), 'travel_time': float(weight)}
+                              'destination': int(target), 'travel_time': float(travel_time),
+                              'distance' : float(distance)}
     return edges
 
 def create_graph(nodes_file, edges_file, requests, vehicles):
@@ -72,10 +74,10 @@ def create_graph(nodes_file, edges_file, requests, vehicles):
         G.add_node(index, **value)
 
     for index, (key, edge) in enumerate(edges.items(), start=0):
-        G.add_edge(edge['origin'], edge['destination'], 
-                   weight=edge['travel_time'], id=edge['edge_id'])
-        G.add_edge(edge['destination'], edge['origin'], 
-                   weight=edge['travel_time'], id=edge['edge_id'])
+        G.add_edge(edge['origin'], edge['destination'], travel_time=edge['travel_time'], 
+                   distance=edge['distance'], id=edge['edge_id'])
+        G.add_edge(edge['destination'], edge['origin'], travel_time=edge['travel_time'], 
+                   distance=edge['distance'], id=edge['edge_id'])
     
     return G
 
