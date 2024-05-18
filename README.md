@@ -60,23 +60,23 @@ pip install -r requirements.txt
 
 
 <div style="text-align:center;margin-top:2rem;margin-bottom:2rem">
-<img src="images/Base_Graph_3.png" alt="Base_Graph" width="500" height="auto">
+<img src="Images/Base_Graph_3.png" alt="Base_Graph" width="500" height="auto">
 </div>
 
 
 3. You could also use `Plot_Graph.py` for plotting the solution, either the overall or the step by step:
 
 <div style="align-items:center;display:flex;justify-content:center;gap:2rem;margin-top:2rem;margin-bottom:2rem">
-<img src="images/Overall_Solution1_3.png" alt="Overall_1" width="250" height="auto">
-<img src="images/Overall_Solution2_3.png" alt="Overall_2" width="250" height="auto">
-<img src="images/Overall_Solution3_3.png" alt="Overall_3" width="250" height="auto">
+<img src="Images/Overall_Solution1_3.png" alt="Overall_1" width="250" height="auto">
+<img src="Images/Overall_Solution2_3.png" alt="Overall_2" width="250" height="auto">
+<img src="Images/Overall_Solution3_3.png" alt="Overall_3" width="250" height="auto">
 </div>
 
 4. You can also create a Gifs using the same file. Both the step by step solutions and the Gifs display the current status of each movement, load of the bus at the beginning and the end, the start and finish time of the movement and path and total cost in the image.
 You can use space bar to move to the next movement or press q to exit
 
 <div style="align-items:center;display:flex;justify-content:center;gap:2rem;margin-top:2rem;margin-bottom:2rem">
-<img src="images/bus_2.gif" alt="bus2_gif" width="500" height="auto">
+<img src="Images/bus_2.gif" alt="bus2_gif" width="500" height="auto">
 </div>
 
 ## Examples
