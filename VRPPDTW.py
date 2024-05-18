@@ -10,21 +10,30 @@ VRPPDTW using the DOcplex solver.
 This is an implementation of the following paper:
 Desaulniers, G., Desrosiers, J., Erdmann, A., Solomon, M.M., & Soumis, F. (2002). 
 VRP with Pickup and Delivery. The Vehicle Routing Problem, 9, pp.225-242.
+
+Functions included:
+- get_time: Get current time
+- get_path_cost: Get the cost of a single path
+- get_cost_matrix: Get path costs for all paths
+- optimize_model: Solve the VRPPDTW problem
+
+Dependencies:
+- docplex.mp.model: For solving the model using DoCplex.
+- networkx: For graph operations.
+- time: For tracking running time of the program
+- datetime: For displaying time in correct format
 """
 __author__ = "Danial Chekani"
 __email__ = "danialchekani@arizona.edu"
 __status__ = "Dev"
 
-import copy
 import time
 from datetime import datetime
-import networkx as nx
 from networkx import DiGraph
 from Parsing import get_full_graph
 from docplex.mp.model import Model
-import json
 
-from Utils import get_bus_movement, get_dirs, get_status, save_json, shortest_path_and_lengths_tt_and_distance
+from Utils import get_bus_movement, get_dirs, get_request_id, get_status, save_json, shortest_path_and_lengths_tt_and_distance
 
 def get_time() -> str:
     """
@@ -39,21 +48,108 @@ def get_time() -> str:
     current_time_str = datetime.fromtimestamp(current_time).strftime('%Y-%m-%d %H:%M:%S')
     return current_time_str
 
-def get_path_cost(travel_time, distance, cost_factors):
+def get_path_cost(travel_time : float, distance : float , bus_type : int, 
+                  capacity : int, cost_factors : list):
+    """
+    Calculate the total cost of a path based on travel time, distance, bus type, 
+    capacity, and given cost factors.
 
-    #TODO design and unpack the cost_factors based on own formulas
+    Parameters
+    ----------
+    travel_time : float
+        The time it takes to travel the path in minutes.
+    distance : float
+        The distance of the path in kilometers.
+    bus_type : int
+        An identifier for the type of bus used.
+    capacity : int
+        The seating capacity of the bus.
+    cost_factors : list
+        A dynamic list containing factors used to calculate the cost.
+        The number of factors depends of the implementation of the formulation.
+        For example, it could include:
+        - alpha (float): The cost factor per minute of travel time.
+        - beta (float): The cost factor per kilometer of distance.
+        - const (float): A constant cost added to the total.
+
+    Returns
+    -------
+    float
+        The total cost of path (i,j) taken by bus k.
+
+    Example
+    -------
+    >>> get_path_cost(160, 150.0, 1, 30, [10.0, 2.0, 100.0])
+    530.0
+    """
+
+    #TODO design and unpack the cost_factors according to your formulation
     alpha, beta, const = cost_factors
 
     return (travel_time * alpha) + (distance * beta) + const
 
-def get_cost_matrix(travel_time_matrix, distance_matrix, cost_factors):
+def get_cost_matrix(vehicles : dict, travel_time_matrix : list, 
+                    distance_matrix : list, cost_factors : list):
+    """
+    Calculate the cost matrix for all paths and vehicles based on travel time, 
+    distance, and given cost factors.
+
+    Parameters
+    ----------
+    vehicles : dict
+        A dictionary where the keys are vehicle IDs and the values are each 
+        vehicle's information in the following format:
+        (Origin_depot_ID, Destination_depot_ID, Capacity, Bus_type)
+    travel_time_matrix : list
+        A 2D list (matrix) where each element represents the travel time in minutes 
+        between two points.
+    distance_matrix : list
+        A 2D list (matrix) where each element represents the distance in kilometers 
+        between two points.
+    cost_factors : list
+        A dynamic list containing factors used to calculate the cost.
+        The number of factors depends of the implementation of the formulation.
+        For example, it could include:
+        - alpha (float): The cost factor per minute of travel time.
+        - beta (float): The cost factor per kilometer of distance.
+        - const (float): A constant cost added to the total.
+
+    Returns
+    -------
+    list
+        A 3D list (matrix) where the element at [i][j][k] represents the cost 
+        of traveling from point i to point j using vehicle k.
+
+    Example
+    -------
+    >>> vehicles = {
+            1: (0, 1, 30, 1),
+            2: (0, 1, 40, 2)
+        }
+    >>> travel_time_matrix = [
+            [0, 30],
+            [30, 0]
+        ]
+    >>> distance_matrix = [
+            [0, 15],
+            [15, 0]
+        ]
+    >>> cost_factors = [10.0, 2.0, 100.0]
+    >>> get_cost_matrix(vehicles, travel_time_matrix, distance_matrix, cost_factors)
+    [[[0.0, 0.0], [430.0, 430.0]], [[430.0, 430.0], [0.0, 0.0]]]
+    """
 
     cost = []
     for i in range(len(travel_time_matrix)):
         cost.append([])
         for j in range(len(travel_time_matrix[i])):
-            result = get_path_cost(travel_time_matrix[i][j], distance_matrix[i][j], cost_factors)
-            cost[i].append(result)
+            cost[i].append([])
+            for k, bus_info in vehicles.items():
+                capacity = bus_info[2]
+                bus_type = bus_info[3]
+                result = get_path_cost(travel_time_matrix[i][j], distance_matrix[i][j], 
+                                        bus_type, capacity,cost_factors)
+                cost[i][j].append(result)
 
     return cost
 
@@ -78,6 +174,14 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
 
     graph : Networkx Digraph
         A graph storing the network's structure and travel times between nodes.
+
+    cost_factors : list
+        A dynamic list containing factors used to calculate the cost.
+        The number of factors depends of the implementation of the formulation.
+        For example, it could include:
+        - alpha (float): The cost factor per minute of travel time.
+        - beta (float): The cost factor per kilometer of distance.
+        - const (float): A constant cost added to the total.
 
     Returns
     -------
@@ -194,14 +298,17 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
 
     print("Created variables: " + get_time())
 
+    # Using Dijekstra to get the shortest paths based on travel time and distance
+    # It is assumed that travel_time is the same for all buses and only
+    # Depends on i and j
     shortest_paths_tt, t, shortest_paths_dist, d = shortest_path_and_lengths_tt_and_distance(graph)
 
-    cost = get_cost_matrix(t, d, cost_factors)
+    cost = get_cost_matrix(vehicles, t, d, cost_factors)
     
     print("Calculated Costs: " + get_time())
 
     # Define the objective function
-    objective = model.sum(cost[V_val[k][i]][V_val[k][j]] * X[(i,j), k] 
+    objective = model.sum(cost[V_val[k][i]][V_val[k][j]][k] * X[(i,j), k] 
                           for (i,j) in A[k] for k in K)
 
     model.minimize(objective)
@@ -324,7 +431,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     chosen_L = {k: [] for k in K}
 
     buses_paths = {k: {} for k in K}
-    buses_paths_sorted = {k: [] for k in K}
+    buses_paths_sorted = {k: [[],{}] for k in K}
 
     if solution:
         for k in K:
@@ -342,9 +449,12 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
                     start_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[i, k])), 60))
                     finish_time_string = "{}:{}".format(*divmod(round(solution.get_value(T[j, k])), 60))
 
-                    status = get_status(V[k][j], V_val[k][j], n)
+                    request_id, destination_type = get_request_id(V[k][j], n)
 
-                    path_cost = cost[V_val[k][i]][V_val[k][j]]
+                    status = get_status(request_id, destination_type, V_val[k][j])
+
+                    # Calculating total cost, travel_time, and distance for each bus
+                    path_cost = cost[V_val[k][i]][V_val[k][j]][k]
                     total_bus_cost += path_cost
                     bus_tt = t[V_val[k][i]][V_val[k][j]]
                     total_bus_travel_time += bus_tt
@@ -355,6 +465,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
                     movement = get_bus_movement(V[k][i], V[k][j], start_time_string,
                                                 finish_time_string, round(solution.get_value(L[i, k])),
                                                 round(solution.get_value(L[j, k])),
+                                                request_id,
                                                 shortest_paths_tt[V_val[k][i]][V_val[k][j]],
                                                 path_cost,
                                                 bus_tt,
@@ -379,7 +490,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
             while len(buses_paths[k]) > 0:
                 item = buses_paths[k].pop(next_i)
                 next_i = item["origin_dest_ids"][1]
-                buses_paths_sorted[k].append(item)
+                buses_paths_sorted[k][0].append(item)
 
             buses_paths_sorted[k][1]["Total_Cost"] = total_bus_cost
             buses_paths_sorted[k][1]["Total_Travel_time"] = total_bus_travel_time
@@ -394,6 +505,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
 
 def main():
 
+    # Getting graph structure, requests and vehicles based on user input data
     base_directory, solution_dir = get_dirs()
     graph, requests, vehicles = get_full_graph(base_directory)
 

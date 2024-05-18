@@ -1,3 +1,4 @@
 Vehicle_ID,Origin_Depot,Destination_Depot,Capacity,Bus_Type
-0,0,7,6,1
-1,0,7,6,1
+0,1,0,6,1
+1,2,0,6,1
+2,0,0,6,1
