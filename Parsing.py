@@ -27,9 +27,12 @@ __email__ = "danialchekani@arizona.edu"
 __status__ = "Dev"
 
 import csv
+from typing import Dict, Tuple
 import networkx as nx
 
-def get_full_graph(base_directory: str) -> tuple:
+from Models import Edge, Node, Request, Vehicle
+
+def get_full_graph(base_directory: str) -> Tuple[nx.DiGraph, Dict[int, Request], Dict[int, Vehicle]]:
     """
     Read input data including vehicles, requests, nodes, and edges, and construct the full graph.
 
@@ -77,7 +80,8 @@ def convert_to_minutes(time_str: str) -> int:
     total_minutes = hours * 60 + minutes
     return total_minutes
 
-def read_nodes(nodes_file: str, requests: dict, vehicles: dict) -> dict:
+def read_nodes(nodes_file: str, requests: Dict[int, Request], 
+               vehicles: Dict[int, Vehicle]) -> Dict[int, Node]:
     """
     Read node data from a CSV file and classify nodes based on requests and vehicles.
     Each line has a format of (Node_ID, X, Y, Name : Optional)
@@ -101,26 +105,21 @@ def read_nodes(nodes_file: str, requests: dict, vehicles: dict) -> dict:
         reader = csv.reader(file)
         next(reader, None)
         for line in reader:
-            node_id = int(line[0])
-            x = float(line[1])
-            y = float(line[2])
-            name = line[3] if len(line) > 3 else None
-            node = {'node_id': node_id, 'x': x, 'y': y, 'name': name, 'node_type' : 'Junction Node'}
-            nodes[node_id] = node
+            node_name = line[3] if len(line) > 3 else None
+            node = Node(int(line[0]), float(line[1]), float(line[2]), 'Junction Node' ,node_name)
+            nodes[node.node_id] = node
 
-    for request_id, request in requests.items():
-        origin, destination, count, _, _, _, _, _, _ = request
-        nodes[origin]['node_type'] = 'Pickup Node'
-        nodes[destination]['node_type'] = 'Delivery Node'
+    for _, request in requests.items():
+        nodes[request.origin_id].node_type = 'Pickup Node'
+        nodes[request.destination_id].node_type = 'Delivery Node'
 
-    for vehicle_id, vehicle in vehicles.items():
-        origin, destination, _, _ = vehicle
-        nodes[origin]['node_type'] = 'Depot Node'
-        nodes[destination]['node_type'] = 'Depot Node'
+    for _, vehicle in vehicles.items():
+        nodes[vehicle.origin_id].node_type = 'Depot Node'
+        nodes[vehicle.destination_id].node_type = 'Depot Node'
 
     return nodes
 
-def read_edges(filename: str) -> dict:
+def read_edges(filename: str) -> Dict[int, Edge]:
     """
     Read edge data from a CSV file.
     Each line has a format of (Edge_ID, Origin, Destination, Travel_Time, Distance)
@@ -140,13 +139,13 @@ def read_edges(filename: str) -> dict:
         reader = csv.reader(file)
         next(reader, None)
         for line in reader:
-            edge_id, source, target, travel_time, distance = line
-            edges[edge_id] = {'edge_id': edge_id, 'origin': int(source), 
-                              'destination': int(target), 'travel_time': float(travel_time),
-                              'distance' : float(distance)}
+            edge = Edge(line[0], int(line[1]), int(line[2]), float(line[3]), float(line[4]))
+            edges[edge.edge_id] = edge
+            
     return edges
 
-def create_graph(nodes_file: str, edges_file: str, requests: dict, vehicles: dict) -> nx.DiGraph:
+def create_graph(nodes_file: str, edges_file: str, requests: Dict[int, Request], 
+                 vehicles: Dict[int, Vehicle]) -> nx.DiGraph:
     """
     Create a directed graph using nodes and edges data.
 
@@ -171,19 +170,19 @@ def create_graph(nodes_file: str, edges_file: str, requests: dict, vehicles: dic
     nodes = read_nodes(nodes_file, requests, vehicles)
     edges = read_edges(edges_file)
     
-    for index, (key, value) in enumerate(nodes.items(), start=0):
-        G.add_node(index, **value)
+    for index, (_, node) in enumerate(nodes.items(), start=0):
+        G.add_node(index, **node.__dict__)
 
     # Add edges in both directions
     for index, (key, edge) in enumerate(edges.items(), start=0):
-        G.add_edge(edge['origin'], edge['destination'], travel_time=edge['travel_time'], 
-                   distance=edge['distance'], id=edge['edge_id'])
-        G.add_edge(edge['destination'], edge['origin'], travel_time=edge['travel_time'], 
-                   distance=edge['distance'], id=edge['edge_id'])
+        G.add_edge(edge.origin_id, edge.destination_id, travel_time=edge.travel_time, 
+                   distance=edge.distance, id=edge.edge_id)
+        G.add_edge(edge.destination_id, edge.origin_id, travel_time=edge.travel_time, 
+                   distance=edge.distance, id=edge.edge_id)
     
     return G
 
-def get_requests(filename: str) -> dict:
+def get_requests(filename: str) -> Dict[int, Request]:
     """
     Read and parse request data from a CSV file.
     Each line has a format of (Request_ID, Origin_ID, Destination_ID, Number_of_people, 
@@ -205,22 +204,15 @@ def get_requests(filename: str) -> dict:
         reader = csv.reader(file)
         next(reader, None)
         for line in reader:
-            request_id = int(line[0])
-            origin = int(line[1])
-            destination = int(line[2])
-            count = int(line[3])
-            earliest_departure_o = convert_to_minutes(line[4])
-            latest_departure_o = convert_to_minutes(line[5])
-            service_time_o = convert_to_minutes(line[6])
-            earliest_departure_d = convert_to_minutes(line[7])
-            latest_departure_d = convert_to_minutes(line[8])
-            service_time_d = convert_to_minutes(line[9])
-            requests[request_id] = (origin, destination, count, earliest_departure_o, 
-                                    latest_departure_o, service_time_o, earliest_departure_d,
-                                    latest_departure_d, service_time_d)
+            request = Request(int(line[0]), int(line[1]), int(line[2]), int(line[3]),
+                              convert_to_minutes(line[4]), convert_to_minutes(line[5]),
+                              convert_to_minutes(line[6]), convert_to_minutes(line[7]),
+                              convert_to_minutes(line[8]), convert_to_minutes(line[9]))
+            requests[request.request_id] = request
+
     return requests
 
-def get_vehicles(filename: str) -> dict:
+def get_vehicles(filename: str) -> Dict[int, Vehicle]:
     """
     Read and parse vehicle data from a CSV file.
     Each line has a format of (Vehicle_ID, Origin_depot, Destination_depot, Capacity, Bus_type)
@@ -235,15 +227,13 @@ def get_vehicles(filename: str) -> dict:
     dict
         A dictionary where keys are vehicle IDs and values are tuples containing vehicle details.
     """
-    buses = {}
+    vehicles = {}
     with open(filename, 'r') as file:
         reader = csv.reader(file)
         next(reader, None)
         for line in reader:
-            bus_id = int(line[0])
-            origin_id = int(line[1])
-            destination_id = int(line[2])
-            capacity = int(line[3])
-            bus_type = int(line[4])
-            buses[bus_id] = (origin_id, destination_id, capacity, bus_type)
-    return buses
+            vehicle = Vehicle(int(line[0]), int(line[1]), int(line[2]),
+                              int(line[3]), int(line[4]))
+            vehicles[vehicle.vehicle_id] = vehicle
+
+    return vehicles

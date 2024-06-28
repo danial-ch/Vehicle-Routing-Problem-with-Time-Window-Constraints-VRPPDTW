@@ -11,6 +11,11 @@ This is an implementation of the following paper:
 Desaulniers, G., Desrosiers, J., Erdmann, A., Solomon, M.M., & Soumis, F. (2002). 
 VRP with Pickup and Delivery. The Vehicle Routing Problem, 9, pp.225-242.
 
+Contributions:
+- Dr. Choobchian: Provided guidance in locating the pertinent research paper, comprehending the underlying problem, and contributing to the implementation.
+- Dr. Mohammadi: Designed sample data and assisted with the implementation process.
+- Dr. Shamshiripour: Contributed to the implementation and offered additional insights.
+
 Functions included:
 - get_time: Get current time
 - get_path_cost: Get the cost of a single path
@@ -29,11 +34,13 @@ __status__ = "Dev"
 
 import time
 from datetime import datetime
+from typing import Dict, List, Tuple
 from networkx import DiGraph
 from Parsing import get_full_graph
 from docplex.mp.model import Model
 
-from Utils import get_bus_movement, get_dirs, get_request_id, get_status, save_json, shortest_path_and_lengths_tt_and_distance
+from Utils import get_dirs, get_request_id, get_status, save_json, shortest_path_and_lengths_tt_and_distance
+from Models import Movement, Request, Trip, Vehicle
 
 def get_time() -> str:
     """
@@ -88,7 +95,7 @@ def get_path_cost(travel_time : float, distance : float , bus_type : int,
 
     return (travel_time * alpha) + (distance * beta) + const
 
-def get_cost_matrix(vehicles : dict, travel_time_matrix : list, 
+def get_cost_matrix(vehicles : Dict[int, Vehicle], travel_time_matrix : list, 
                     distance_matrix : list, cost_factors : list):
     """
     Calculate the cost matrix for all paths and vehicles based on travel time, 
@@ -144,16 +151,16 @@ def get_cost_matrix(vehicles : dict, travel_time_matrix : list,
         cost.append([])
         for j in range(len(travel_time_matrix[i])):
             cost[i].append([])
-            for k, bus_info in vehicles.items():
-                capacity = bus_info[2]
-                bus_type = bus_info[3]
+            for k, vehicle in vehicles.items():
                 result = get_path_cost(travel_time_matrix[i][j], distance_matrix[i][j], 
-                                        bus_type, capacity,cost_factors)
+                                        vehicle.bus_type, vehicle.capacity, cost_factors)
                 cost[i][j].append(result)
 
     return cost
 
-def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_factors : list) -> dict:
+def optimize_model(vehicles : Dict[int, Vehicle], requests : Dict[int, Request], 
+                   graph : DiGraph, cost_factors : list) \
+                    -> Tuple[Dict[int, Trip], Dict[int, List], Dict[int, str], Dict[int, int]]:
     """"
     The main function to solve the Vehicle Routing Problem with Time Window Constraints
 
@@ -161,16 +168,11 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     Parameters
     ----------
     vehicles : dict
-        A dictionary where the keys are the vehicle IDs and the values 
-        are each vehicle's information in the following format:
-        (Origin_depot_ID, Destination_depot,ID, Capacity)
+        A dictionary where the keys are the vehicle IDs and the values are vehicles
 
     requests : dict
         A dictionary where the keys are the request IDs and the values
-        are each request's information in the following format:
-        (Request_origin, Request_destination, Num_people_at_request, Earliest_departure_minutes,
-        Latest_departure_minutes, Departure_service_time, Earliest_arrival_minutes,
-        Latest_arrival_minutes, Arrival_service_time)
+        are requests
 
     graph : Networkx Digraph
         A graph storing the network's structure and travel times between nodes.
@@ -185,20 +187,16 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
 
     Returns
     -------
-    buses_paths_sorted : dict
-        A dictionary where the keys are bus IDs and the values
-        are a list of travels the bus has made in order of travel.
-        Each travel is a dictionary in the following format:
-        {'origin_dest_ids' : tuple, (i,j), 'start_time' : str, HH:MM, 'finish_time' : str, HH:MM,
-         'start_load' : int, 'finish_load' : int, 'path' : list[int], 'status' : str}
+    trips : dict
+        A dictionary where the keys are vehicle IDs and the values are trips
     chosen_X : dict
-        A dictionary where the keys are the bus IDs and the values
-        are the travel arcs chosen by the bus.
+        A dictionary where the keys are the vehicle IDs and the values
+        are the travel arcs chosen by the vehicle.
     chosen_T : dict
-        A dictionary where the keys are the bus IDs and the values
+        A dictionary where the keys are the vehicle IDs and the values
         are the times at which request i has been completed.
     chosen_L : dict
-        A dictionary where the keys are the bus IDs and the values
+        A dictionary where the keys are the vehicle IDs and the values
         are the loads that have changed after serving request i.
     """
 
@@ -210,9 +208,9 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     N_values = []
 
     for request_id, request in requests.items():
-        N_values.append(request[0])
+        N_values.append(request.origin_id)
     for request_id, request in requests.items():
-        N_values.append(request[1])
+        N_values.append(request.destination_id)
 
     """
     Creating auxiliary lists P, D, N
@@ -237,16 +235,16 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     l = [] # List of the loads at each node in N.
 
     for i in range(n):
-        l.append(requests[i][2])
-        a.append(requests[i][3])
-        b.append(requests[i][4])
-        s.append(requests[i][5])
+        l.append(requests[i].num_of_people)
+        a.append(requests[i].earliest_departure_minutes)
+        b.append(requests[i].latest_departure_minutes)
+        s.append(requests[i].departure_service_time)
 
     for i in range(n):
-        l.append(-requests[i][2]) # load of a bus changes by -d_i when delivering request i
-        a.append(requests[i][6])
-        b.append(requests[i][7])
-        s.append(requests[i][8])
+        l.append(-requests[i].num_of_people) # load of a bus changes by -d_i when delivering request i
+        a.append(requests[i].earliest_arrival_minutes)
+        b.append(requests[i].latest_arrival_minutes)
+        s.append(requests[i].arrival_service_time)
 
     # Including values for depots
     a.extend([0,24*60])
@@ -261,7 +259,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     # Creating dict of possible arcs for each bus
     for k in K:
         arcs = []
-        V_val[k] = N_values + [vehicles[k][0], vehicles[k][1]]
+        V_val[k] = N_values + [vehicles[k].origin_id, vehicles[k].destination_id]
         V[k] = [i for i in range(len(V_val[k]))]
         for i in V[k]:
             for j in V[k]:
@@ -301,7 +299,7 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     # Using Dijekstra to get the shortest paths based on travel time and distance
     # It is assumed that travel_time is the same for all buses and only
     # Depends on i and j
-    shortest_paths_tt, t, shortest_paths_dist, d = shortest_path_and_lengths_tt_and_distance(graph)
+    shortest_paths_tt, t, _, d = shortest_path_and_lengths_tt_and_distance(graph)
 
     cost = get_cost_matrix(vehicles, t, d, cost_factors)
     
@@ -400,14 +398,15 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     for k in K:
         for i in P:
             model.add_constraint(L[i, k] >= l[i], ctname=f'const_9_11_lower_{k}_{i}')
-            model.add_constraint(L[i, k] <= vehicles[k][2], ctname=f'const_9_11_upper_{k}_{i}')
+            model.add_constraint(L[i, k] <= vehicles[k].capacity, ctname=f'const_9_11_upper_{k}_{i}')
 
     # Constraint 9.12
     for k in K:
         for z in D:
             i = z - n
             model.add_constraint(L[z, k] >= 0, ctname=f'const_9_12_lower_{k}_{i}')
-            model.add_constraint(L[z, k] <= vehicles[k][2] - l[i], ctname=f'const_9_12_upper_{k}_{i}')
+            model.add_constraint(L[z, k] <= vehicles[k].capacity - l[i], 
+                                 ctname=f'const_9_12_upper_{k}_{i}')
 
     # Constraint 9.13
     for k in K:
@@ -430,16 +429,10 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
     chosen_T = {k: [] for k in K}
     chosen_L = {k: [] for k in K}
 
-    buses_paths = {k: {} for k in K}
-    buses_paths_sorted = {k: [[],{}] for k in K}
+    trips = {k: Trip() for k in K}
 
     if solution:
         for k in K:
-
-            total_bus_cost = 0
-            total_bus_travel_time = 0
-            total_bus_dist = 0
-        
             for (i, j) in A[k]:
                 # Choosing arcs that are 1
                 var_value = solution.get_value(X[(i,j), k])
@@ -455,23 +448,23 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
 
                     # Calculating total cost, travel_time, and distance for each bus
                     path_cost = cost[V_val[k][i]][V_val[k][j]][k]
-                    total_bus_cost += path_cost
-                    bus_tt = t[V_val[k][i]][V_val[k][j]]
-                    total_bus_travel_time += bus_tt
-                    bus_dist = d[V_val[k][i]][V_val[k][j]]
-                    total_bus_dist += bus_dist
+                    trips[k].total_cost += path_cost
+                    path_tt = t[V_val[k][i]][V_val[k][j]]
+                    trips[k].total_travel_time += path_tt
+                    path_dist = d[V_val[k][i]][V_val[k][j]]
+                    trips[k].total_distance += path_dist
                     
-                    # Creating the buses_path dict
-                    movement = get_bus_movement(V[k][i], V[k][j], start_time_string,
-                                                finish_time_string, round(solution.get_value(L[i, k])),
-                                                round(solution.get_value(L[j, k])),
-                                                request_id,
-                                                shortest_paths_tt[V_val[k][i]][V_val[k][j]],
-                                                path_cost,
-                                                bus_tt,
-                                                bus_dist,
-                                                status)
-                    buses_paths[k][V[k][i]] = movement
+                    movement = Movement(V[k][i], V[k][j], start_time_string,
+                                        finish_time_string, round(solution.get_value(L[i, k])),
+                                        round(solution.get_value(L[j, k])),
+                                        request_id,
+                                        shortest_paths_tt[V_val[k][i]][V_val[k][j]],
+                                        path_cost,
+                                        path_tt,
+                                        path_dist,
+                                        status)
+                    
+                    trips[k].movements[V[k][i]] = movement
                     
                     # Storing chosen arcs from X
                     chosen_X[k].append((V_val[k][i], V_val[k][j]))
@@ -486,22 +479,14 @@ def optimize_model(vehicles : dict, requests : dict, graph : DiGraph, cost_facto
                 chosen_L[k].append(round(solution.get_value(L[i, k])))
 
             # Sorting arcs based on values of (i,j)
-            next_i = 2*n
-            while len(buses_paths[k]) > 0:
-                item = buses_paths[k].pop(next_i)
-                next_i = item["origin_dest_ids"][1]
-                buses_paths_sorted[k][0].append(item)
-
-            buses_paths_sorted[k][1]["Total_Cost"] = total_bus_cost
-            buses_paths_sorted[k][1]["Total_Travel_time"] = total_bus_travel_time
-            buses_paths_sorted[k][1]["Total_Distance"] = total_bus_dist
+            trips[k].sort_movements(n)
 
         print("Objective value:", model.objective_value)
 
     else:
         print("The model could not be solved.")
 
-    return buses_paths_sorted, chosen_X, chosen_T, chosen_L
+    return trips, chosen_X, chosen_T, chosen_L
 
 def main():
 
@@ -509,12 +494,12 @@ def main():
     base_directory, solution_dir = get_dirs()
     graph, requests, vehicles = get_full_graph(base_directory)
 
-    buses_paths, chosen_x_ijk, chosen_t_ik, chosen_l_ik = \
+    trips, chosen_x_ijk, chosen_t_ik, chosen_l_ik = \
     optimize_model(vehicles, requests, graph, [0.6, 0.5, 5])
     
     # If model is solved, the results are stored in json files
-    if not (len(buses_paths) == 0 or len(buses_paths[0]) == 0):
-        save_json(solution_dir, "buses_paths", buses_paths)
+    if not (len(trips) == 0):
+        save_json(solution_dir, "trips", trips)
         save_json(solution_dir, "chosen_x_ijk", chosen_x_ijk)
         save_json(solution_dir, "chosen_t_ik", chosen_t_ik)
         save_json(solution_dir, "chosen_l_ik", chosen_l_ik)

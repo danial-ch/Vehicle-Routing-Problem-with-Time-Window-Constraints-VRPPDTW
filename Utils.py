@@ -29,9 +29,12 @@ __status__ = "Dev"
 import json
 import os
 from pathlib import Path
+from typing import Tuple
 import networkx as nx
 
-def get_dirs() -> tuple:
+from Models import Movement, Trip
+
+def get_dirs() -> Tuple[str, str]:
     """
     Prompt the user to input the folder name of the problem and return the base 
     directory and solution directory paths.
@@ -54,29 +57,16 @@ def get_dirs() -> tuple:
 
     return base_directory, solution_dir
 
-def load_json(dir: str, file_name: str) -> dict:
+class Obj_encoder(json.JSONEncoder):
     """
-    Load a JSON file from the specified directory.
-
-    Parameters
-    ----------
-    dir : str
-        The directory where the JSON file is located.
-    file_name : str
-        The name of the JSON file to load (without the .json extension).
-
-    Returns
-    -------
-    dict
-        The contents of the JSON file as a dictionary.
+    An encoder to serialize object into a format to be saved into Json
     """
-    Path(dir).mkdir(parents=True, exist_ok=True)
-    with open(dir + f"{file_name}.json", "r") as json_file:
-        file = json.load(json_file)
+    def default(self, obj):
+        if isinstance(obj, (Movement, Trip)):
+            return obj.__dict__
+        return super().default(obj)
 
-    return file
-
-def save_json(dir: str, file_name: str, file: dict):
+def save_json(dir: str, file_name: str, file: dict) -> None:
     """
     Save a dictionary to a JSON file in the specified directory.
 
@@ -91,7 +81,7 @@ def save_json(dir: str, file_name: str, file: dict):
     """
     Path(dir).mkdir(parents=True, exist_ok=True)
     with open(dir + f"{file_name}.json", "w") as json_file:
-        json.dump(file, json_file, indent=4)
+        json.dump(file, json_file, indent=4, cls=Obj_encoder)
 
 def shortest_path_and_lengths_tt_and_distance(graph: nx.DiGraph) -> tuple:
     """
@@ -192,55 +182,3 @@ def get_status(request_id: int, type: str, destination: int) -> str:
         status = f"Going to Destination Depot {destination}"
 
     return status
-
-def get_bus_movement(origin_id: int, destination_id: int, t1: str, t2: str, 
-                     l1: int, l2: int, request_id: int, path: list, 
-                     path_cost: float, tt: float, dist: float, status: str) -> dict:
-    """
-    Create a dictionary representing a bus movement.
-
-    Parameters
-    ----------
-    origin_id : int
-        The origin node ID.
-    destination_id : int
-        The destination node ID.
-    t1 : str
-        The start time in HH:MM format.
-    t2 : str
-        The finish time in HH:MM format.
-    l1 : int
-        The load at the start of the journey.
-    l2 : int
-        The load at the end of the journey.
-    request_id : int
-        The request ID.
-    path : list
-        A list of node IDs representing the path.
-    path_cost : float
-        The cost of the path.
-    tt : float
-        The travel time in minutes.
-    dist : float
-        The travel distance in kilometers.
-    status : str
-        The status of the movement.
-
-    Returns
-    -------
-    dict
-        A dictionary representing the bus movement.
-    """
-    movement = {"origin_dest_ids": (origin_id, destination_id), 
-                "start_time": t1,
-                "finish_time": t2, 
-                "start_load": l1,
-                "finish_load": l2,
-                "request_id": request_id,
-                "path": path,
-                "path_cost": path_cost,
-                "travel_time": tt,
-                "travel_distance": dist,
-                "status": status}
-    
-    return movement

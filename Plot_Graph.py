@@ -236,12 +236,12 @@ def add_info_to_plot(total_cost: float, info: dict, x_lim: tuple, y_lim: tuple) 
                 fontsize=10, color='white',
         bbox=dict(boxstyle="round", facecolor='black', edgecolor="none"))
 
-    load_text = f"Load : {info['start_load']} -> {info['finish_load']}"
+    load_text = f"Load : {info['l1']} -> {info['l2']}"
     plt.text(x_lim[0] + 0.1, y_lim[1] * 1.15, load_text, ha='left', 
                 va='center', fontsize=8, color='white',
         bbox=dict(boxstyle="round", facecolor='purple', edgecolor="none"))
     
-    time_text = f"Time : {info['start_time']} -> {info['finish_time']}"
+    time_text = f"Time : {info['t1']} -> {info['t2']}"
     plt.text(x_lim[0] + 0.1, y_lim[1] * 1.075, time_text, ha='left', 
                 va='center', fontsize=8, color='white',
         bbox=dict(boxstyle="round", facecolor='blue', edgecolor="none"))
@@ -272,8 +272,8 @@ def plot_step_by_step(graph: nx.DiGraph, pos: dict, solution_dir: str, Gif: bool
     global space_pressed
 
     # Read the JSON file
-    with open(solution_dir + "buses_paths.json", "r") as json_file:
-        buses_paths = json.load(json_file)
+    with open(solution_dir + "trips.json", "r") as json_file:
+        trips = json.load(json_file)
 
     gif_dir = solution_dir + "Gifs/"
 
@@ -283,8 +283,8 @@ def plot_step_by_step(graph: nx.DiGraph, pos: dict, solution_dir: str, Gif: bool
 
     # Create a separate figure for each bus
     bus_cnt = 0
-    for bus, bus_info in buses_paths.items():
-        movements = bus_info[0]
+    for bus, trip in trips.items():
+        movements = trip['movements_sorted']
         total_cost = 0
         fig, ax = plt.subplots(figsize=(8, 6))
         fig.suptitle('Bus ' + str(bus) , fontsize=20)

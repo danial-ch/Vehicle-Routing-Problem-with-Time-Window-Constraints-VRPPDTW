@@ -55,7 +55,7 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-1. Run the main function within the `VRPPDTW.py` file. As the input, enter the folder name of one of the samples(For example 2). Each folder contains 4 csv files as the input data. Running the code will output 4 json files for chosen l_ik, t_ik, x_ijk and finally buses_paths which includes all the information necessary. You could also create and test you own examples by placing them inside the `Samples` directory
+1. Run the main function within the `VRPPDTW.py` file. As the input, enter the folder name of one of the samples(For example 2). Each folder contains 4 csv files as the input data. Running the code will output 4 json files for chosen l_ik, t_ik, x_ijk and finally trips which includes all the information necessary. You could also create and test you own examples by placing them inside the `Samples` directory
 2. Use `Plot_Graph.py` for plotting the graph layout along with request pickups, deliveries, and depots, like the image below:
 
 
@@ -64,7 +64,7 @@ pip install -r requirements.txt
 </div>
 
 
-3. You could also use `Plot_Graph.py` for plotting the solution, either the overall or the step by step:
+3. You could also use `Plot_Graph.py` for plotting the solution, either the overall or the step by step. Use <b>Spacebar</b> to go to next step and <b>q</b> to exit:
 
 <div style="align-items:center;display:flex;justify-content:center;gap:2rem;margin-top:2rem;margin-bottom:2rem">
 <img src="Images/Overall_Solution1_3.png" alt="Overall_1" width="250" height="auto">
@@ -84,6 +84,11 @@ To see examples of how the VRPWT solver can be used, check out the `Solution` wi
 
 ## Contact
 For questions or feedback, please email [danialchekani@arizona.edu](mailto:danialchekani@arizona.edu) or [danialchekani2000@gmail.com](danialchekani2000@gmail.com)
+
+## Contributions
+- Dr. Choobchian: Provided guidance in locating the pertinent research paper, comprehending the underlying problem, and contributing to the implementation.
+- Dr. Mohammadi: Designed sample data and assisted with the implementation process.
+- Dr. Shamshiripour: Contributed to the implementation and offered additional insights.
 
 ## Acknowledgements
 
